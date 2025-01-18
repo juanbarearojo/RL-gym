@@ -1,6 +1,6 @@
 gymnasium
 swig
-"gymnasium[box2d]"
+"gymnasium[box2d]" 29.01
 from stable_baselines3 import PPO
 swig
 pip install "gymnasium[box2d]"

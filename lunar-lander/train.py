@@ -1,31 +1,19 @@
 import gymnasium as gym
 from stable_baselines3 import PPO
-from stable_baselines3.common.env_util import make_vec_env  # <-- Import desde env_util
+from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.evaluation import evaluate_policy
 
 def main():
-    """
-    Ejemplo de entrenamiento, evaluación y prueba de un modelo PPO
-    con el entorno LunarLander-v3 de Gymnasium, incluyendo renderizado.
-    """
-
-    # --------------------
-    # 1) CREAR EL ENTORNO
-    # --------------------
-    env_id = "LunarLander-v3"
-    # Creamos un entorno vectorizado con 2 procesos para entrenar
-    vec_env = make_vec_env(env_id, n_envs=2)
-
-    # Para evaluación con un monitor:
+    env_id = "LunarLander-v2"
+    # Crear entorno vectorizado
+    vec_env = make_vec_env(env_id, n_envs=8)
+    # Monitor para evaluación
     eval_env = Monitor(gym.make(env_id))
 
-    # ----------------------------
-    # 2) DEFINIR EL MODELO (PPO)
-    # ----------------------------
     model = PPO(
-        policy="MlpPolicy",
-        env=vec_env,
+        "MlpPolicy",
+        vec_env,
         n_steps=1024,
         batch_size=64,
         n_epochs=4,
@@ -35,54 +23,46 @@ def main():
         verbose=1
     )
 
-    # -------------------------
-    # 3) ENTRENAR EL MODELO
-    # -------------------------
-    total_timesteps = 200_000  # Ajusta según tus recursos
+    # Entrenamiento
+    total_timesteps = 1_000_000
     print(f"Entrenando durante {total_timesteps} timesteps...")
     model.learn(total_timesteps=total_timesteps)
 
-    # -------------------------
-    # 4) GUARDAR EL MODELO
-    # -------------------------
-    model_name = "lunar-lander/ppo-LunarLander-v3"  # Renombrado para evitar confusión
+    # Guardar el modelo
+    model_name = "lunar-lander/ppo-LunarLander-v2"
     model.save(model_name)
     print(f"Modelo guardado como: {model_name}.zip")
 
-    # -------------------------
-    # 5) EVALUAR EL MODELO
-    # -------------------------
+    # Evaluación
     mean_reward, std_reward = evaluate_policy(
-        model, 
-        eval_env, 
-        n_eval_episodes=30, 
+        model,
+        eval_env,
+        n_eval_episodes=10,
         deterministic=True
     )
     print(f"Recompensa media tras evaluación: {mean_reward:.2f} +/- {std_reward:.2f}")
 
     # ---------------------------------------
-    # 6) PRUEBA VISUAL CON RENDERIZACIÓN
+    # PRUEBA VISUAL
     # ---------------------------------------
-    # Crea un entorno normal (no vectorizado) con render_mode="human"
+    # Lo correcto en Gymnasium es especificar render_mode:
     test_env = gym.make(env_id, render_mode="human")
 
     episodes = 5
     for ep in range(episodes):
-        obs, info = test_env.reset()  # Gymnasium: reset() devuelve (obs, info)
+        # En la nueva API, reset() devuelve (obs, info)
+        obs, info = test_env.reset()
+
         done = False
-        truncated = False
-        total_rewards = 0
+        total_rewards = 0.0
 
-        while not (done or truncated):
-            # Si quieres llamar manualmente al render (opcional):
-            # test_env.render()
+        while not done:
+            # model.predict() requiere solo obs (numpy array)
+            action, _states = model.predict(obs, deterministic=True)
 
-            # El modelo predice la acción dada la observación actual
-            action, _ = model.predict(obs, deterministic=True)
-
-            # Paso en el entorno con Gymnasium API:
-            obs, reward, done, truncated, info = test_env.step(action)
-
+            # La nueva API de step() devuelve (obs, reward, terminated, truncated, info)
+            obs, reward, terminated, truncated, info = test_env.step(action)
+            done = terminated or truncated
             total_rewards += reward
 
         print(f"Episodio {ep+1}/{episodes} - Recompensa total: {total_rewards:.2f}")
