@@ -1,79 +1,125 @@
 """
-PASO PREVIO:
------------
-1) Instala huggingface_hub y huggingface_sb3 (si no lo has hecho):
-    pip install huggingface_hub huggingface_sb3
+Script unificado: entrena un modelo PPO en LunarLander-v2, prueba localmente
+y sube el modelo entrenado a la Hugging Face Hub.
 
-2) Inicia sesión en tu cuenta de Hugging Face:
-   - Si estás en un notebook (Colab/Jupyter):
-        from huggingface_hub import notebook_login
-        notebook_login()
-   - O desde la terminal/VSCode:
-        huggingface-cli login
-   Pega tu token con permisos 'write'.
+PASOS PREVIOS:
+--------------
+1) Instala las dependencias (si no lo has hecho):
+       pip install gymnasium box2d-py stable-baselines3 huggingface_hub huggingface_sb3
+
+2) Inicia sesión en tu cuenta de Hugging Face con permiso de escritura:
+       huggingface-cli login
+
+3) Ajusta la variable 'repo_id' con tu usuario y nombre de repositorio
+   en la Hugging Face Hub, por ejemplo "MiUsuario/ppo-LunarLander-v2"
 """
 
 import gymnasium as gym
-from gymnasium.wrappers import Monitor
-
 # Stable Baselines 3
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 # Librería para subir modelos a Hugging Face
 from huggingface_sb3 import package_to_hub
 
 def main():
-    """
-    Ejemplo de cómo subir un modelo PPO entrenado en LunarLander a la Hugging Face Hub.
-    """
+    # ------------------------------------------------------------------------
+    # 1) ENTRENAMIENTO DEL MODELO
+    # ------------------------------------------------------------------------
+    env_id = "LunarLander-v2"
+    vec_env = make_vec_env(env_id, n_envs=8)  # entorno vectorizado
 
-    # --------------------------------------------------------------------------------
-    # 1) CARGAR TU MODELO ENTRENADO
-    # --------------------------------------------------------------------------------
-    # Supongamos que entrenaste y guardaste tu modelo bajo el nombre 'ppo-LunarLander-v2'.
-    # Si lo tienes en memoria (variable model), omite la carga.
-    model_name = "ppo-LunarLander-v2"
-    model = PPO.load(model_name)
+    # Este entorno se usa para evaluación (registra métricas con Monitor)
+    eval_env = Monitor(gym.make(env_id))
 
-    # --------------------------------------------------------------------------------
-    # 2) DEFINIR CONFIGURACIONES DEL ENTORNO Y PARAMETROS
-    # --------------------------------------------------------------------------------
-    # Usaremos "LunarLander-v2" (gymnasium) o "LunarLander-v3" si tienes gymnasium con box2d.
-    # Ajusta según tu entorno.
-    env_id = "LunarLander-v2"  
-    model_architecture = "PPO"
+    # Definimos el modelo PPO
+    model = PPO(
+        policy="MlpPolicy",
+        env=vec_env,
+        n_steps=1024,
+        batch_size=64,
+        n_epochs=4,
+        gamma=0.999,
+        gae_lambda=0.98,
+        ent_coef=0.01,
+        verbose=1
+    )
 
-    # Creamos un DummyVecEnv que envuelve un entorno de gym con render en modo "rgb_array"
-    eval_env = DummyVecEnv([lambda: Monitor(gym.make(env_id, render_mode="rgb_array"))])
+    # Entrenamiento
+    total_timesteps = 1_000_000
+    print(f"Entrenando durante {total_timesteps} timesteps...")
+    model.learn(total_timesteps=total_timesteps)
 
-    # Este repo_id debe ser único y seguir el formato "usuario_de_HF/nombre_de_repo".
-    # e.g. "tuUsuarioDeHF/ppo-LunarLander-v2"
-    repo_id = "TU_USUARIO_HF/ppo-LunarLander-v2"
+    # Guardamos el modelo (carpeta "lunar-lander" + nombre del zip)
+    model_path = "lunar-lander/ppo-LunarLander-v2"
+    model.save(model_path)
+    print(f"Modelo guardado en: {model_path}.zip")
 
-    # Mensaje de commit para la subida
+    # ------------------------------------------------------------------------
+    # 2) EVALUACIÓN DEL MODELO (cálculo de recompensa media)
+    # ------------------------------------------------------------------------
+    mean_reward, std_reward = evaluate_policy(
+        model,
+        eval_env,
+        n_eval_episodes=10,
+        deterministic=True
+    )
+    print(f"Recompensa media tras evaluación: {mean_reward:.2f} +/- {std_reward:.2f}")
+
+    # ------------------------------------------------------------------------
+    # 3) PRUEBA VISUAL LOCAL (con render_mode="human")
+    # ------------------------------------------------------------------------
+    test_env = gym.make(env_id, render_mode="human")
+
+    episodes = 5
+    for ep in range(episodes):
+        obs, info = test_env.reset()
+        done = False
+        total_rewards = 0.0
+
+        while not done:
+            # Predice la acción de manera determinista
+            action, _states = model.predict(obs, deterministic=True)
+            obs, reward, terminated, truncated, info = test_env.step(action)
+            done = terminated or truncated
+            total_rewards += reward
+
+        print(f"Episodio {ep+1}/{episodes} - Recompensa total: {total_rewards:.2f}")
+
+    test_env.close()
+    print("Prueba local finalizada.")
+
+    # ------------------------------------------------------------------------
+    # 4) SUBIR EL MODELO A LA HUGGING FACE HUB
+    # ------------------------------------------------------------------------
+    # Si deseas omitir la subida, puedes comentar la sección siguiente
+
+    # a) Ajusta tu repo en Hugging Face: "TU_USUARIO/algún_nombre"
+    repo_id = "Barearojojuan/ppo-LunarLander-v2"
     commit_message = "Upload PPO LunarLander-v2 trained agent"
 
-    # --------------------------------------------------------------------------------
-    # 3) SUBIR EL MODELO A HUGGING FACE
-    # --------------------------------------------------------------------------------
-    # package_to_hub generará:
-    #   - un archivo README (model card),
-    #   - un video de la evaluación,
-    #   - un archivo de metadatos,
-    #   - y subirá todo a tu repositorio en la Hugging Face Hub.
+    # Creamos un DummyVecEnv para que package_to_hub pueda grabar un video de evaluación
+    # Gymnasium necesita render_mode="rgb_array" para capturar fotogramas.
+    hf_eval_env = DummyVecEnv([lambda: Monitor(gym.make(env_id, render_mode="rgb_array"))])
+
+    # Llamamos a package_to_hub, pasando el modelo ya entrenado en memoria
+    # model_name: nombre "lógico" que se usará en la metadata (y para .zip)
     package_to_hub(
-        model=model,                       # Tu modelo entrenado (PPO, DQN, etc.)
-        model_name=model_name,             # Nombre del archivo del modelo (sin .zip)
-        model_architecture=model_architecture,  # Arquitectura: PPO, DQN, A2C...
-        env_id=env_id,                     # Nombre del entorno
-        eval_env=eval_env,                 # Entorno que se usará para grabar video y evaluar
-        repo_id=repo_id,                   # ID del repo en HF: "usuario/nombre-repo"
-        commit_message=commit_message      # Mensaje para el commit
+        model=model,
+        model_name="ppo-LunarLander-v2",      # aparecerá como "ppo-LunarLander-v2.zip" en HF
+        model_architecture="PPO",
+        env_id=env_id,
+        eval_env=hf_eval_env,                # se usará para grabar video de evaluación
+        repo_id=repo_id,
+        commit_message=commit_message
     )
 
     print("\n¡Modelo subido exitosamente a la Hugging Face Hub!")
     print(f"Revisa tu repositorio en: https://huggingface.co/{repo_id}")
+
 
 if __name__ == "__main__":
     main()
