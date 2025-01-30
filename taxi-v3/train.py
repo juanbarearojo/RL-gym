@@ -110,7 +110,7 @@ def main():
     env = gym.make(env_id)  # Por defecto, sin render para entrenamiento
 
     # Hiperparámetros de Q-Learning
-    n_training_episodes = 25000
+    n_training_episodes = 200000
     learning_rate = 0.7
     gamma = 0.95
     max_steps = 99
