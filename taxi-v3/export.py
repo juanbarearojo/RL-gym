@@ -22,7 +22,7 @@ from huggingface_hub import HfApi, Repository
 # --------------------------------------------------------------------------------
 
 # Parám. de entrenamiento
-n_training_episodes = 25000  # Total training episodes
+n_training_episodes = 100000  # Total training episodes
 learning_rate = 0.7          # Learning rate
 
 # Parám. de evaluación
@@ -131,7 +131,7 @@ def evaluate_q_table(env, Q, n_episodes_eval, max_steps_eval, seeds):
     return np.mean(rewards), np.std(rewards)
 
 
-def push_to_hub(repo_id, model, env, local_repo_path="q-taxi-hub", commit_msg="Q-learning Taxi-v3 Upload"):
+def push_to_hub(repo_id, model, env, local_repo_path="taxi-v3-model", commit_msg="Q-learning Taxi-v3 Upload"):
     """
     Sube el modelo y metadatos a Hugging Face Hub.
     
@@ -207,14 +207,12 @@ def main():
     # 5) Subir a la Hugging Face Hub (opcional)
     # Reemplaza con tu nombre de usuario y nombre de repo en HF
     username = "Barearojojuan"  # <--- ¡Cambia esto!
-    repo_name = "q-learning-taxi-v3"  # <--- ¡Cambia esto!
+    repo_name = "q-taxi-v3"  # <--- ¡Cambia esto!
     repo_id = f"{username}/{repo_name}"
 
     # Subida al Hub
     push_to_hub(repo_id=repo_id, model=model_dict, env=env)
 
-    print("\nProceso completo. Puedes comparar en la leaderboard:\n"
-          "https://huggingface.co/spaces/huggingface-projects/Deep-Reinforcement-Learning-Leaderboard")
 
 
 if __name__ == "__main__":
