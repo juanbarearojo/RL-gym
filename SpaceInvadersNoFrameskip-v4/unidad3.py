@@ -20,3 +20,11 @@ virtual_display = Display(visible=0, size=(1400, 900))
 virtual_display.start()
 
 !python -m rl_zoo3.train --algo dqn  --env SpaceInvadersNoFrameskip-v4 -f logs/ -c dqn.yml
+
+!python -m rl_zoo3.enjoy  --algo dqn  --env SpaceInvadersNoFrameskip-v4  --no-render  --n-timesteps 5000  --folder logs/
+
+from huggingface_hub import notebook_login # To log to our Hugging Face account to be able to upload models to the Hub.
+notebook_login()
+!git config --global credential.helper store
+
+!python -m rl_zoo3.push_to_hub  --algo dqn  --env SpaceInvadersNoFrameskip-v4  --repo-name dqn-SpaceInvadersNoFrameskip-v4  -orga Barearojojuan  -f logs/
