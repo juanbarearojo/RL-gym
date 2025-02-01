@@ -38,5 +38,5 @@ Este proyecto está licenciado bajo la [MIT License](LICENSE).
 ---
 
 ## 🧑‍💻 Autor
-**Juan Barearojo**  
+**Juan Barea Rojo**  
 [GitHub](https://github.com/juanbarearojo/RL-gym) | [Hugging Face](https://huggingface.co/Barearojojuan)
